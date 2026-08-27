@@ -553,7 +553,7 @@
 
     // ---- Social links (from admin settings) ----
     async function loadSocialLinks() {
-      const snap = await db.collection("settings").doc("main").get();
+      const snap = await db.collection("gameSettings").doc("main").get();
       if (!snap.exists) return;
       const s = snap.data();
       if (s.social) {
