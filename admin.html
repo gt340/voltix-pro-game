@@ -262,7 +262,7 @@
     });
 
     async function loadSettings() {
-      const snap = await db.collection("settings").doc("main").get();
+      const snap = await db.collection("gameSettings").doc("main").get();
       if (snap.exists) {
         const s = snap.data();
         document.getElementById("ballPackage").value = s.ballPackage || 10;
@@ -302,7 +302,7 @@
         },
         updatedAt: firebase.firestore.FieldValue.serverTimestamp()
       };
-      await db.collection("settings").doc("main").set(data, { merge: true });
+      await db.collection("gameSettings").doc("main").set(data, { merge: true });
       document.getElementById("settingsStatus").textContent = "Settings saved ✓";
       setTimeout(() => document.getElementById("settingsStatus").textContent = "", 2500);
     };
