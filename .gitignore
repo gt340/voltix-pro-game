@@ -1,9 +1,0 @@
-node_modules/
-.vercel
-.env
-.env.local
-*.env
-
-# Never commit any Firebase service account key files
-*firebase-adminsdk*.json
-serviceAccountKey.json
