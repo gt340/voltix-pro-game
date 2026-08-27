@@ -358,7 +358,7 @@
     }
 
     async function loadSettings() {
-      const snap = await db.collection("settings").doc("main").get();
+      const snap = await db.collection("gameSettings").doc("main").get();
       if (snap.exists) settings = { ...settings, ...snap.data() };
       document.getElementById("ballPrice").textContent = "GHc " + settings.ballPriceGhc;
       document.getElementById("shopPrice").textContent = "GHc " + settings.ballPriceGhc;
