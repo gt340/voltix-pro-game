@@ -1,0 +1,58 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAdmin() {
+      return request.auth != null &&
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    // Users: anyone signed in can read; can create/update their own doc,
+    // but CANNOT write to "balls" directly — only the backend (Admin SDK,
+    // which bypasses these rules entirely) may credit or debit balls.
+    match /users/{userId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && request.auth.uid == userId;
+      allow update: if request.auth != null && request.auth.uid == userId
+                    && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['balls']);
+    }
+
+    // Transactions: users can read their own; nobody can write from the
+    // client. Only the backend (Admin SDK) creates transaction records.
+    match /transactions/{txId} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
+    // Admins allow-list: only readable by the signed-in admin checking their
+    // own membership. Never writable from the client — add/remove admins
+    // only from the Firebase Console.
+    match /admins/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if false;
+    }
+
+    // Settings: public read (banners, prices), writes restricted to admins.
+    match /settings/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Banners: public read, admin write
+    match /banners/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Leaderboard: public read, admin/backend write
+    match /leaderboard/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Chat messages: signed-in users only
+    match /chat/{document=**} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}
