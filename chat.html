@@ -119,7 +119,9 @@
       font-size: 1.15rem;
       cursor: pointer;
       display: flex; align-items: center; justify-content: center;
+      text-decoration: none;
     }
+    .topbar .icon-btn { width: 34px; height: 34px; font-size: 1rem; }
     .icon-btn.rec { background: #7f1d1d; }
     .icon-btn.send { background: #2563eb; }
     .hidden { display: none !important; }
@@ -162,6 +164,7 @@
       font-weight: 600;
       cursor: pointer;
     }
+    .btn-gold { background: linear-gradient(135deg, #b45309, #fbbf24); color: #0f172a; }
     .empty { text-align: center; color: #64748b; padding: 30px 16px; font-size: 0.9rem; }
   </style>
 </head>
@@ -170,7 +173,9 @@
     <img src="voltix-logo.png" alt="Voltix" onerror="this.style.display='none'" />
     <h1 id="chatTitle">Voltix Chat</h1>
     <button class="icon-btn" id="backBtn" style="display:none;">←</button>
-    <a href="index.html" class="icon-btn" title="Game">⚽</a>
+    <a href="index.html" class="icon-btn" title="Foosball">⚽</a>
+    <a href="kaisa.html" class="icon-btn" title="Kaisa">🎱</a>
+    <a href="damii.html" class="icon-btn" title="Damii">♟️</a>
   </div>
 
   <div class="tabs" id="mainTabs">
@@ -194,7 +199,7 @@
   <!-- FRIENDS / 1:1 LIST -->
   <div class="view" id="view-chats">
     <div id="pendingChallengeBanner" class="join-box hidden" style="border:1px solid #f59e0b;">
-      <p style="font-size:0.85rem; color:#fbbf24; font-weight:600;">⚡ You have a challenge code to share: <span id="pendingChallengeCodeText"></span></p>
+      <p style="font-size:0.85rem; color:#fbbf24; font-weight:600;">⚡ You have a <span id="pendingChallengeGameText">Foosball</span> challenge code to share: <span id="pendingChallengeCodeText"></span></p>
       <p style="font-size:0.78rem; color:#94a3b8; margin:4px 0 8px;">Tap a friend below to send it, or post it to the group chat.</p>
       <button class="btn btn-gold" id="sendChallengeToGroupBtn">Send to Group Chat</button>
       <button class="btn" id="cancelChallengeShareBtn">Cancel</button>
@@ -224,7 +229,7 @@
     <div class="join-box">
       <h3 style="color:#fbbf24; margin-bottom:8px;">Join Voltix Family</h3>
       <p style="font-size:0.85rem; color:#94a3b8; margin-bottom:12px;">
-        Share these links with family & friends so they can join the community and play Foosball Challenge.
+        Share these links with family & friends so they can join the community and play Foosball, Kaisa and Damii.
       </p>
     </div>
     <div class="social-links" id="socialLinks">
@@ -287,16 +292,28 @@
       return data.secure_url;
     }
 
+    // ---- The games that can send challenges ----
+    // Messages saved before this list existed have no "game" field and are Foosball.
+    const GAMES = {
+      foosball: { label: "Foosball Challenge", icon: "⚡", page: "index.html" },
+      kaisa:    { label: "Kaisa Challenge",    icon: "🎱", page: "kaisa.html" },
+      damii:    { label: "Damii Challenge",    icon: "♟️", page: "damii.html" }
+    };
+    function gameInfo(key) { return GAMES[key] || GAMES.foosball; }
+
     let currentUser = null;
     let userData = { name: "Player", phone: "" };
     let currentDmId = null;
     let unsubGroup = null;
 
-    // ---- Challenge code sharing (came from index.html "Share to Chat") ----
-    let pendingChallengeCode = new URLSearchParams(window.location.search).get("shareCode");
+    // ---- Challenge code sharing (came from a game's "Share to Chat") ----
+    const urlParams = new URLSearchParams(window.location.search);
+    let pendingChallengeCode = urlParams.get("shareCode");
+    let pendingChallengeGame = GAMES[urlParams.get("game")] ? urlParams.get("game") : "foosball";
     if (pendingChallengeCode) {
       document.getElementById("pendingChallengeBanner").classList.remove("hidden");
       document.getElementById("pendingChallengeCodeText").textContent = pendingChallengeCode;
+      document.getElementById("pendingChallengeGameText").textContent = gameInfo(pendingChallengeGame).label.replace(" Challenge", "");
       // Switch to Friends tab so the banner + friend list are visible immediately
       document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
       document.querySelector('.tab[data-tab="chats"]')?.classList.add("active");
@@ -375,15 +392,16 @@
       let html = "";
       if (!isMe && m.name) html += `<div style="font-size:0.7rem;color:#60a5fa;margin-bottom:2px;">${escapeHtml(m.name)}</div>`;
       if (m.type === "image" && m.url) {
-        html += `<img class="media" src="${m.url}" alt="img" />`;
+        html += `<img class="media" src="${escapeHtml(m.url)}" alt="img" />`;
       } else if (m.type === "voice" && m.url) {
-        html += `<audio controls src="${m.url}"></audio>`;
+        html += `<audio controls src="${escapeHtml(m.url)}"></audio>`;
       } else if (m.type === "challenge" && m.code) {
+        const g = gameInfo(m.game);
         html += `
           <div style="background:#1e293b; border:1px solid #f59e0b; border-radius:10px; padding:10px; min-width:180px;">
-            <div style="font-weight:700; color:#fbbf24;">⚡ Foosball Challenge</div>
+            <div style="font-weight:700; color:#fbbf24;">${g.icon} ${escapeHtml(g.label)}</div>
             <div style="font-size:0.8rem; color:#94a3b8; margin:4px 0;">Room code: <b style="color:#e2e8f0;">${escapeHtml(m.code)}</b></div>
-            <a href="index.html?joinCode=${encodeURIComponent(m.code)}" style="display:inline-block; margin-top:6px; background:linear-gradient(135deg,#b45309,#fbbf24); color:#0f172a; font-weight:700; padding:6px 12px; border-radius:6px; text-decoration:none; font-size:0.85rem;">Join Challenge</a>
+            <a href="${g.page}?joinCode=${encodeURIComponent(m.code)}" style="display:inline-block; margin-top:6px; background:linear-gradient(135deg,#b45309,#fbbf24); color:#0f172a; font-weight:700; padding:6px 12px; border-radius:6px; text-decoration:none; font-size:0.85rem;">Join Challenge</a>
           </div>`;
       } else {
         html += escapeHtml(m.text || "");
@@ -395,10 +413,10 @@
     }
 
     function escapeHtml(s) {
-      return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+      return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
     }
 
-    async function sendGroupMessage(text, type = "text", url = null, code = null) {
+    async function sendGroupMessage(text, type = "text", url = null, code = null, game = null) {
       if (!currentUser) return;
       await db.collection("groupChat").add({
         uid: currentUser.uid,
@@ -407,6 +425,7 @@
         type,
         url: url || null,
         code: code || null,
+        game: game || null,
         createdAt: firebase.firestore.FieldValue.serverTimestamp()
       });
     }
@@ -524,8 +543,9 @@
       // If the user arrived here to share a challenge code, send it now
       if (pendingChallengeCode) {
         const codeToSend = pendingChallengeCode;
+        const gameToSend = pendingChallengeGame;
         clearPendingChallenge();
-        setTimeout(() => sendDm("", "challenge", null, codeToSend), 300);
+        setTimeout(() => sendDm("", "challenge", null, codeToSend, gameToSend), 300);
       }
     }
 
@@ -541,7 +561,7 @@
       loadFriendsList();
     };
 
-    async function sendDm(text, type = "text", url = null, code = null) {
+    async function sendDm(text, type = "text", url = null, code = null, game = null) {
       if (!currentDmId || !currentUser) return;
       await db.collection("dms").doc(currentDmId).collection("messages").add({
         uid: currentUser.uid,
@@ -550,6 +570,7 @@
         type,
         url: url || null,
         code: code || null,
+        game: game || null,
         createdAt: firebase.firestore.FieldValue.serverTimestamp()
       });
     }
@@ -580,7 +601,7 @@
 
     document.getElementById("sendChallengeToGroupBtn").onclick = async () => {
       if (!pendingChallengeCode) return;
-      await sendGroupMessage("", "challenge", null, pendingChallengeCode);
+      await sendGroupMessage("", "challenge", null, pendingChallengeCode, pendingChallengeGame);
       alert("Challenge posted to the group chat!");
       clearPendingChallenge();
     };
@@ -601,7 +622,7 @@
         const item = document.createElement("div");
         item.className = "chat-item";
         item.innerHTML = `
-          <div class="avatar">${(f.name || "?")[0].toUpperCase()}</div>
+          <div class="avatar">${escapeHtml((f.name || "?")[0].toUpperCase())}</div>
           <div class="chat-meta">
             <div class="name">${escapeHtml(f.name || "Friend")}</div>
             <div class="preview">Tap to open chat</div>
