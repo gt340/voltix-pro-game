@@ -161,9 +161,10 @@
   <!-- BALANCE + NAV -->
   <div class="balance-bar">
     <div>Balls: <span class="balance" id="ballBalance">0</span></div>
-    <div style="display:flex; gap:6px;">
-      <a href="index.html" class="btn" style="padding:6px 10px;">⚽ Foosball</a>
-      <a href="chat.html" class="btn" style="padding:6px 10px;">💬 Chat</a>
+    <div style="display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end;">
+      <a href="index.html" class="btn" style="padding:6px 10px;" title="Foosball">⚽</a>
+      <a href="damii.html" class="btn" style="padding:6px 10px;" title="Damii">♟️</a>
+      <a href="chat.html" class="btn" style="padding:6px 10px;" title="Chat">💬</a>
       <a href="index.html?buy=1" class="btn btn-gold" style="padding:6px 10px;">Buy Balls</a>
     </div>
   </div>
@@ -296,8 +297,9 @@
       <button class="btn" style="width:100%; margin-top:6px;" id="joinRoomBtn">Join Room</button>
       <button class="btn" style="width:100%; margin-top:10px;" id="closeChallengeBtn">Cancel</button>
       <div id="roomDisplay" style="margin-top:10px; color:#60a5fa; font-weight:700;"></div>
-      <div id="roomActions" class="hidden" style="display:flex; gap:8px; margin-top:8px;">
-        <button class="btn btn-gold" style="flex:1;" id="shareLinkBtn">🔗 Share Invite Link</button>
+      <div id="roomActions" class="hidden" style="display:flex; gap:8px; margin-top:8px; flex-wrap:wrap;">
+        <button class="btn btn-gold" style="flex:1; min-width:130px;" id="shareLinkBtn">🔗 Share Invite Link</button>
+        <button class="btn btn-gold" style="flex:1; min-width:130px;" id="shareGroupBtn">💬 Post to Group Chat</button>
       </div>
       <div id="challengeStatus" style="font-size:0.8rem; color:#f87171; margin-top:8px;"></div>
     </div>
@@ -417,6 +419,9 @@
     const BALL_R = 14, POCKET_R = 26;
     const FRICTION = 0.987, CUSHION_BOUNCE = 0.87, MIN_VEL = 0.08, MAX_POWER = 22;
     const RAIL = 32;
+    // Playing surface = the felt inside the cushions. Balls stay on it (they never roll over the wood).
+    const CUSH = RAIL + 6;
+    const PL = CUSH, PR = TABLE_W - CUSH, PT = CUSH, PB = TABLE_H - CUSH;
     let WIN_SCORE = 60; // admin can change this (gameSettings.kaisaWinScore)
 
     function resizeCanvas() {
@@ -429,8 +434,8 @@
     resizeCanvas();
 
     const pockets = [
-      {x: 0, y: 0}, {x: TABLE_W/2, y: 0}, {x: TABLE_W, y: 0},
-      {x: 0, y: TABLE_H}, {x: TABLE_W/2, y: TABLE_H}, {x: TABLE_W, y: TABLE_H}
+      {x: PL, y: PT}, {x: TABLE_W/2, y: PT}, {x: PR, y: PT},
+      {x: PL, y: PB}, {x: TABLE_W/2, y: PB}, {x: PR, y: PB}
     ];
 
     // Difficulty presets
@@ -552,10 +557,10 @@
           b.vx = 0; b.vy = 0;
         } else anyMoving = true;
         b.x += b.vx; b.y += b.vy;
-        if (b.x < BALL_R) { b.x = BALL_R; b.vx = -b.vx * CUSHION_BOUNCE; }
-        if (b.x > TABLE_W - BALL_R) { b.x = TABLE_W - BALL_R; b.vx = -b.vx * CUSHION_BOUNCE; }
-        if (b.y < BALL_R) { b.y = BALL_R; b.vy = -b.vy * CUSHION_BOUNCE; }
-        if (b.y > TABLE_H - BALL_R) { b.y = TABLE_H - BALL_R; b.vy = -b.vy * CUSHION_BOUNCE; }
+        if (b.x < PL + BALL_R) { b.x = PL + BALL_R; b.vx = -b.vx * CUSHION_BOUNCE; }
+        if (b.x > PR - BALL_R) { b.x = PR - BALL_R; b.vx = -b.vx * CUSHION_BOUNCE; }
+        if (b.y < PT + BALL_R) { b.y = PT + BALL_R; b.vy = -b.vy * CUSHION_BOUNCE; }
+        if (b.y > PB - BALL_R) { b.y = PB - BALL_R; b.vy = -b.vy * CUSHION_BOUNCE; }
         if (isInPocket(b)) {
           b.pocketed = true; b.vx = 0; b.vy = 0;
           lastPotted.push(b);
@@ -566,6 +571,12 @@
           if (!balls[i].pocketed && !balls[j].pocketed) resolveBallCollision(balls[i], balls[j]);
         }
       }
+      // Collisions can shove a ball into a cushion — keep every ball on the felt
+      for (const b of balls) {
+        if (b.pocketed) continue;
+        b.x = Math.min(PR - BALL_R, Math.max(PL + BALL_R, b.x));
+        b.y = Math.min(PB - BALL_R, Math.max(PT + BALL_R, b.y));
+      }
       return anyMoving;
     }
 
@@ -573,7 +584,7 @@
     function freeSpot(ball, cx, cy) {
       for (let t = 0; t < 60; t++) {
         const x = t === 0 ? cx : 80 + Math.random() * (TABLE_W * 0.4);
-        const y = t === 0 ? cy : RAIL + BALL_R + Math.random() * (TABLE_H - 2 * RAIL - 2 * BALL_R);
+        const y = t === 0 ? cy : PT + BALL_R + Math.random() * (PB - PT - 2 * BALL_R);
         const clear = !balls.some(o => o !== ball && !o.pocketed && Math.hypot(o.x - x, o.y - y) < BALL_R * 2.4);
         if (clear) return { x, y };
       }
@@ -952,7 +963,7 @@
 
       // Pockets – deep 3D holes
       for (const p of pockets) {
-        const isCorner = (p.x === 0 || p.x === TABLE_W) && (p.y === 0 || p.y === TABLE_H);
+        const isCorner = (p.x === PL || p.x === PR) && (p.y === PT || p.y === PB);
         const pr = isCorner ? POCKET_R + 2 : POCKET_R;
         ctx.beginPath();
         ctx.arc(p.x, p.y, pr + 5, 0, Math.PI * 2);
@@ -1147,7 +1158,7 @@
         if (guest) {
           // Guest never simulates — it eases toward the host's latest positions.
           for (const b of balls) {
-            if (b.tx !== undefined) { b.x += (b.tx - b.x) * 0.55; b.y += (b.ty - b.y) * 0.55; }
+            if (b.tx !== undefined) { const k = Net.direct ? 0.55 : 0.16; b.x += (b.tx - b.x) * k; b.y += (b.ty - b.y) * k; }
           }
         } else if (isMoving) {
           for (let i = 0; i < 3; i++) {
@@ -1364,11 +1375,13 @@
     function quitToMenu() {
       gameToken++; clearTimeout(aiTimer);
       if (mode === 'online') {
-        try { if (dc && dc.readyState === 'open') dc.send(JSON.stringify({ t: 'bye' })); } catch (e) {}
+        Net.send({ t: 'bye' }, true);
         if (isHost && matchCode && !gameOver) {
           db.collection('matches').doc(matchCode).update({ status: 'cancelled' }).catch(() => {});
         }
-        cleanupWebRTC();
+        setTimeout(() => Net.close(), 400);   // let the goodbye go out first
+        clearInterval(helloTimer);
+        if (unsubMatch) { unsubMatch(); unsubMatch = null; }
         matchCode = null;
       }
       mode = null; isMoving = false; isAiming = false;
@@ -1379,23 +1392,145 @@
       loadLeaderboard();
     }
 
-    // ---------- WebRTC (host-authoritative), signalled through Firestore ----------
-    let pc = null, dc = null, unsubSignal = null, unsubMatch = null, matchCode = null;
+    // ---------- Network layer: WebRTC (direct / TURN) + automatic Firestore relay ----------
+    // Every message is sent over the direct WebRTC channel when it is open. When it is not
+    // (blocked NAT, strict carrier, still connecting) the very same message goes through a
+    // Firestore "relay" instead, so a match can ALWAYS connect and play, on any network.
+    const STUN_SERVERS = [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' }
+    ];
+    function iceConfig() {
+      let extra = [];
+      try {
+        const j = JSON.parse(settings.iceServersJson || '[]');
+        if (Array.isArray(j)) extra = j.filter(s => s && s.urls);
+      } catch (e) { console.warn('Bad iceServersJson in settings', e); }
+      return { iceServers: STUN_SERVERS.concat(extra), iceCandidatePoolSize: 2 };
+    }
+
+    const Net = (() => {
+      let pc = null, dc = null, unsubSignal = null, unsubRelay = null;
+      let code = null, role = null, relayTs = 0, lastStateRelay = 0;
+      const api = {
+        onMessage: () => {},
+        onStatus: () => {},
+        get active() { return !!code; },
+        get direct() { return !!dc && dc.readyState === 'open'; }
+      };
+      const signalCol = () => db.collection('matches').doc(code).collection('signal');
+      const relayCol = () => db.collection('matches').doc(code).collection('relay');
+
+      function startRelay() {
+        const me = role;
+        unsubRelay = relayCol().orderBy('ts').onSnapshot((snap) => {
+          snap.docChanges().forEach((ch) => {
+            if (ch.type !== 'added') return;
+            const d = ch.doc.data();
+            if (!d || d.from === me) return;
+            try { api.onMessage(JSON.parse(d.d)); } catch (e) {}
+          });
+        }, (err) => console.warn('relay listen error', err));
+      }
+
+      function relaySend(obj, important) {
+        if (!code) return;
+        const now = Date.now();
+        // State snapshots are streamed often; over the relay keep only ~5 per second (turn-end ones always go)
+        if (obj.t === 's' && !important) {
+          if (now - lastStateRelay < 220) return;
+          lastStateRelay = now;
+        }
+        relayTs = Math.max(now, relayTs + 1); // strictly increasing per sender => ordered delivery
+        relayCol().add({ from: role, ts: relayTs, d: JSON.stringify(obj) }).catch(() => {});
+      }
+
+      function wireChannel(ch) {
+        dc = ch;
+        ch.onopen = () => api.onStatus('direct');
+        ch.onclose = () => api.onStatus('relay');
+        ch.onerror = () => api.onStatus('relay');
+        ch.onmessage = (e) => { try { api.onMessage(JSON.parse(e.data)); } catch (err) {} };
+      }
+
+      async function startRtc() {
+        if (typeof RTCPeerConnection === 'undefined') return;
+        pc = new RTCPeerConnection(iceConfig());
+        const me = role, other = role === 'host' ? 'guest' : 'host';
+        pc.onicecandidate = (e) => {
+          if (e.candidate && code) signalCol().add({ type: 'ice', from: me, candidate: e.candidate.toJSON() }).catch(() => {});
+        };
+        pc.onconnectionstatechange = () => {
+          if (pc && (pc.connectionState === 'failed' || pc.connectionState === 'disconnected')) api.onStatus('relay');
+        };
+        let chain = Promise.resolve();
+        const pendingIce = [];
+        const flushIce = async () => {
+          while (pendingIce.length) { try { await pc.addIceCandidate(pendingIce.shift()); } catch (e) {} }
+        };
+        const handle = async (msg) => {
+          if (!pc) return;
+          try {
+            if (msg.type === 'offer' && me === 'guest') {
+              await pc.setRemoteDescription(msg.sdp);
+              await flushIce();
+              const answer = await pc.createAnswer();
+              await pc.setLocalDescription(answer);
+              await signalCol().add({ type: 'answer', from: 'guest', sdp: { type: answer.type, sdp: answer.sdp } });
+            } else if (msg.type === 'answer' && me === 'host') {
+              await pc.setRemoteDescription(msg.sdp);
+              await flushIce();
+            } else if (msg.type === 'ice' && msg.candidate) {
+              if (pc.remoteDescription) await pc.addIceCandidate(msg.candidate);
+              else pendingIce.push(msg.candidate); // ICE can arrive before the offer/answer — hold it
+            }
+          } catch (e) { /* late/duplicate candidates are harmless */ }
+        };
+        unsubSignal = signalCol().onSnapshot((snap) => {
+          snap.docChanges().forEach((change) => {
+            if (change.type !== 'added') return;
+            const msg = change.doc.data();
+            if (msg.from !== other) return;
+            chain = chain.then(() => handle(msg));   // process strictly one at a time
+          });
+        });
+        if (me === 'host') {
+          wireChannel(pc.createDataChannel('game', { ordered: true }));
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+          await signalCol().add({ type: 'offer', from: 'host', sdp: { type: offer.type, sdp: offer.sdp } });
+        } else {
+          pc.ondatachannel = (e) => wireChannel(e.channel);
+        }
+      }
+
+      api.open = async (c, r) => {
+        api.close();
+        code = c; role = r;
+        startRelay();                       // relay is live immediately
+        try { await startRtc(); }           // …while the direct channel negotiates in the background
+        catch (e) { console.warn('WebRTC unavailable — using relay only', e); }
+        api.onStatus(api.direct ? 'direct' : 'relay');
+      };
+      api.send = (obj, important) => {
+        if (!code) return;
+        if (api.direct) { try { dc.send(JSON.stringify(obj)); return; } catch (e) {} }
+        relaySend(obj, important);
+      };
+      api.close = () => {
+        if (unsubSignal) { unsubSignal(); unsubSignal = null; }
+        if (unsubRelay) { unsubRelay(); unsubRelay = null; }
+        if (dc) { try { dc.close(); } catch (e) {} dc = null; }
+        if (pc) { try { pc.close(); } catch (e) {} pc = null; }
+        code = null; role = null;
+      };
+      return api;
+    })();
+
+    // ---------- Match transport glue ----------
+    let unsubMatch = null, matchCode = null, stateSeq = 0, lastStateQ = 0, gotState = false, helloTimer = null;
     let lastStateSend = 0;
     const EMOJIS = ['🔥', '😂', '💪', '👏', '😱', '🏆'];
-    const iceServers = {
-      iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' }
-      ]
-    };
-
-    function cleanupWebRTC() {
-      if (unsubSignal) { unsubSignal(); unsubSignal = null; }
-      if (unsubMatch) { unsubMatch(); unsubMatch = null; }
-      if (dc) { try { dc.close(); } catch (e) {} dc = null; }
-      if (pc) { try { pc.close(); } catch (e) {} pc = null; }
-    }
 
     function setConn(text, kind) {
       const el = $('connStatus');
@@ -1404,105 +1539,53 @@
       const c = colors[kind] || ['#1e293b', '#94a3b8'];
       el.style.background = c[0]; el.style.color = c[1];
     }
+    Net.onStatus = (k) => {
+      if (mode !== 'online') return;
+      if (k === 'direct') setConn('● Live • direct', 'ok');
+      else setConn('● Live • relay', 'warn');
+    };
+    Net.onMessage = handleNetMessage;
 
-    function signalCol(code) { return db.collection('matches').doc(code).collection('signal'); }
-
-    async function setupHostWebRTC(code) {
-      cleanupWebRTC();
-      pc = new RTCPeerConnection(iceServers);
-      dc = pc.createDataChannel('kaisa', { ordered: true });
-      setupDataChannel(dc);
-      pc.onicecandidate = async (e) => {
-        if (e.candidate) await signalCol(code).add({ type: 'ice', from: 'host', candidate: e.candidate.toJSON() });
-      };
-      unsubSignal = signalCol(code).onSnapshot(async (snap) => {
-        for (const change of snap.docChanges()) {
-          if (change.type !== 'added') continue;
-          const msg = change.doc.data();
-          if (msg.from !== 'guest') continue;
-          if (msg.type === 'answer' && msg.sdp) await pc.setRemoteDescription(msg.sdp);
-          else if (msg.type === 'ice' && msg.candidate) { try { await pc.addIceCandidate(msg.candidate); } catch (e) {} }
-        }
-      });
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-      await signalCol(code).add({ type: 'offer', from: 'host', sdp: { type: offer.type, sdp: offer.sdp } });
+    function handleNetMessage(msg) {
+      if (!msg || mode !== 'online') return;
+      if (msg.t === 's' && !isHost) applyState(msg);
+      else if (msg.t === 'shot' && isHost) handleShot(msg);
+      else if (msg.t === 'hi' && isHost) sendState(true);
+      else if (msg.t === 'emoji' && EMOJIS.includes(msg.e)) showEmoji(msg.e);
+      else if (msg.t === 'bye' && !gameOver) {
+        setConn('● Opponent left', 'bad');
+        statusEl.textContent = 'Opponent left the match';
+      }
     }
 
-    async function setupGuestWebRTC(code) {
-      cleanupWebRTC();
-      pc = new RTCPeerConnection(iceServers);
-      pc.ondatachannel = (e) => { dc = e.channel; setupDataChannel(dc); };
-      pc.onicecandidate = async (e) => {
-        if (e.candidate) await signalCol(code).add({ type: 'ice', from: 'guest', candidate: e.candidate.toJSON() });
-      };
-      unsubSignal = signalCol(code).onSnapshot(async (snap) => {
-        for (const change of snap.docChanges()) {
-          if (change.type !== 'added') continue;
-          const msg = change.doc.data();
-          if (msg.from !== 'host') continue;
-          if (msg.type === 'offer' && msg.sdp) {
-            await pc.setRemoteDescription(msg.sdp);
-            const answer = await pc.createAnswer();
-            await pc.setLocalDescription(answer);
-            await signalCol(code).add({ type: 'answer', from: 'guest', sdp: { type: answer.type, sdp: answer.sdp } });
-          } else if (msg.type === 'ice' && msg.candidate) {
-            try { await pc.addIceCandidate(msg.candidate); } catch (e) {}
-          }
-        }
-      });
-    }
-
-    function setupDataChannel(ch) {
-      ch.onopen = () => {
-        setConn('● Connected', 'ok');
-        if (isHost) sendState(true);
-        else { try { ch.send(JSON.stringify({ t: 'hi' })); } catch (e) {} }
-        refreshStatus();
-      };
-      ch.onclose = () => {
-        if (mode !== 'online') return;
-        setConn('● Disconnected', 'bad');
-        if (!gameOver) statusEl.textContent = 'Connection closed';
-      };
-      ch.onerror = () => setConn('● Error', 'warn');
-      ch.onmessage = (e) => {
-        let msg;
-        try { msg = JSON.parse(e.data); } catch (err) { return; }
-        if (!msg || mode !== 'online') return;
-        if (msg.t === 's' && !isHost) applyState(msg);
-        else if (msg.t === 'shot' && isHost) handleShot(msg);
-        else if (msg.t === 'hi' && isHost) sendState(true);
-        else if (msg.t === 'emoji' && EMOJIS.includes(msg.e)) showEmoji(msg.e);
-        else if (msg.t === 'bye' && !gameOver) {
-          setConn('● Opponent left', 'bad');
-          statusEl.textContent = 'Opponent left the match';
-        }
-      };
-    }
-
-    function dcSend(obj) {
-      if (!dc || dc.readyState !== 'open') return;
-      try { dc.send(JSON.stringify(obj)); } catch (e) {}
+    // The guest keeps asking for the table until the host's first state arrives
+    function startHello() {
+      clearInterval(helloTimer);
+      gotState = false;
+      helloTimer = setInterval(() => {
+        if (gotState || mode !== 'online') { clearInterval(helloTimer); return; }
+        Net.send({ t: 'hi' }, true);
+      }, 1500);
+      Net.send({ t: 'hi' }, true);
     }
 
     // Host → guest: full table state (~30 fps while balls move, plus at every turn change)
     function sendState(force) {
-      if (mode !== 'online' || !isHost || !dc || dc.readyState !== 'open') return;
+      if (mode !== 'online' || !isHost || !Net.active) return;
       const now = performance.now();
       if (!force && now - lastStateSend < 33) return;
       lastStateSend = now;
-      dcSend({
-        t: 's',
+      Net.send({
+        t: 's', q: ++stateSeq,
         b: balls.map(b => [b.id, Math.round(b.x * 10) / 10, Math.round(b.y * 10) / 10, b.pocketed ? 1 : 0]),
         ps: playerScore, as: aiScore, cp: currentPlayer,
         mv: isMoving ? 1 : 0, ov: gameOver ? 1 : 0, win: winner,
         w: WIN_SCORE, n: note, sf: pendingSfx.splice(0)
-      });
+      }, !!force);
     }
 
     // Guest → host: a shot (velocity vector for the guest's cue ball)
-    function sendShot(vx, vy) { dcSend({ t: 'shot', vx, vy }); }
+    function sendShot(vx, vy) { Net.send({ t: 'shot', vx, vy }, true); }
 
     function handleShot(msg) {
       const ok = currentPlayer === 'ai' && !isMoving && !gameOver;
@@ -1522,6 +1605,9 @@
 
     function applyState(m) {
       if (!balls.length || !Array.isArray(m.b)) return;
+      if (m.q && m.q <= lastStateQ) return;   // stale snapshot that arrived late over the other path
+      if (m.q) lastStateQ = m.q;
+      gotState = true;
       for (const [id, x, y, p] of m.b) {
         const b = balls.find(o => o.id === id);
         if (!b) continue;
@@ -1567,7 +1653,7 @@
       btn.addEventListener('click', () => {
         const e = btn.dataset.emoji;
         showEmoji(e);
-        dcSend({ t: 'emoji', e });
+        Net.send({ t: 'emoji', e }, true);
       });
     });
 
@@ -1587,7 +1673,7 @@
       // Cancel a room nobody has joined yet
       if (matchCode && isHost && mode !== 'online') {
         db.collection('matches').doc(matchCode).update({ status: 'cancelled' }).catch(() => {});
-        cleanupWebRTC();
+        if (unsubMatch) { unsubMatch(); unsubMatch = null; }
         matchCode = null;
       }
       $('createRoomBtn').disabled = false;
@@ -1633,18 +1719,13 @@
         if (!d || started || d.status !== 'playing' || !d.guestId) return;
         started = true;
         roomInfo = { hostName: userData.name || 'P1', guestName: d.guestName || 'Friend' };
-        try {
-          await setupHostWebRTC(code);
-        } catch (err) {
-          started = false;
-          challengeMsg('Connection failed: ' + err.message);
-          return;
-        }
         $('challengeModal').classList.add('hidden');
         $('roomActions').classList.add('hidden');
         $('createRoomBtn').disabled = false;
+        lastStateQ = 0; stateSeq = 0;
+        await Net.open(code, 'host');
         startGame('online');
-        setConn('● Connecting…', 'warn');
+        Net.onStatus(Net.direct ? 'direct' : 'relay');
       });
     };
 
@@ -1663,6 +1744,18 @@
       }
     };
 
+    $('shareGroupBtn').onclick = async () => {
+      if (!matchCode || !currentUser) return;
+      try {
+        await db.collection('groupChat').add({
+          uid: currentUser.uid, name: userData.name || 'Player',
+          text: '', type: 'challenge', game: 'kaisa', code: matchCode, url: null,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        challengeMsg('Posted to the group chat ✓', false);
+      } catch (err) { challengeMsg("Couldn't post: " + err.message); }
+    };
+
     $('joinRoomBtn').onclick = async () => {
       if (!currentUser && !(await waitForAuth())) return;
       challengeMsg('');
@@ -1675,7 +1768,11 @@
         const snap = await ref.get();
         if (!snap.exists) { challengeMsg('Room not found.'); return; }
         const d = snap.data();
-        if (d.game !== 'kaisa') { challengeMsg("That's a Foosball room — join it from the Foosball game."); return; }
+        if (d.game !== 'kaisa') {
+          const dest = d.game === 'damii' ? 'damii.html' : 'index.html';
+          window.location.href = dest + '?joinCode=' + encodeURIComponent(code);
+          return;
+        }
         if (d.hostId === currentUser.uid) { challengeMsg("That's your own room."); return; }
         // Claim the seat atomically so two friends can't both join
         await db.runTransaction(async (tx) => {
@@ -1695,9 +1792,11 @@
         WIN_SCORE = d.firstTo || WIN_SCORE;
         roomInfo = { hostName: d.hostName || 'P1', guestName: userData.name || 'P2' };
         $('challengeModal').classList.add('hidden');
-        await setupGuestWebRTC(code);
+        lastStateQ = 0;
+        await Net.open(code, 'guest');
         startGame('online');
-        setConn('● Connecting…', 'warn');
+        Net.onStatus(Net.direct ? 'direct' : 'relay');
+        startHello();
       } catch (err) {
         challengeMsg(err.message || 'Could not join.');
       } finally {
@@ -1728,7 +1827,7 @@
       statusEl.textContent = 'Hint: Aim yellow Kaisa (6) into a pocket. Scoring keeps your turn!';
     });
     window.addEventListener('pagehide', () => {
-      if (mode === 'online') { try { if (dc && dc.readyState === 'open') dc.send(JSON.stringify({ t: 'bye' })); } catch (e) {} }
+      if (mode === 'online') Net.send({ t: 'bye' }, true);
     });
 
     // ---------- Boot ----------
