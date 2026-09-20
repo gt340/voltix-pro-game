@@ -223,12 +223,20 @@
 
     <div class="section">
       <h2>More Games</h2>
-      <a href="kaisa.html" style="text-decoration:none; color:inherit; display:block;">
-        <div class="mode-card">
-          <h3>🎱 Kaisa Challenge</h3>
-          <p>Pool game • vs AI, online friend or pass &amp; play<br>First to 60 wins</p>
-        </div>
-      </a>
+      <div class="mode-grid">
+        <a href="kaisa.html" style="text-decoration:none; color:inherit; display:block;">
+          <div class="mode-card">
+            <h3>🎱 Kaisa Challenge</h3>
+            <p>Pool • vs AI, online friend or pass &amp; play</p>
+          </div>
+        </a>
+        <a href="damii.html" style="text-decoration:none; color:inherit; display:block;">
+          <div class="mode-card">
+            <h3>♟️ Damii</h3>
+            <p>Ghanaian draughts • vs Hard AI or online friend</p>
+          </div>
+        </a>
+      </div>
     </div>
 
     <div class="section">
@@ -536,6 +544,7 @@
       loadSpriteImage(settings.rodRed3Url, (img) => rodRedImages[3] = img);
       loadSpriteImage(settings.ballSpriteUrl, (img) => ballSpriteImage = img);
       MatchAudio.setClips(settings);
+      applyTurnSettings();
     }
 
     // ---- Background music player ----
@@ -741,8 +750,19 @@
       iceServers: [
         { urls: "stun:stun.l.google.com:19302" },
         { urls: "stun:stun1.l.google.com:19302" }
-      ]
+      ],
+      iceCandidatePoolSize: 2
     };
+    // Admin can add a TURN relay (Admin → Connection). It lets players on strict
+    // mobile networks connect when a direct link is impossible.
+    function applyTurnSettings() {
+      try {
+        const extra = JSON.parse(settings.iceServersJson || "[]");
+        if (Array.isArray(extra)) {
+          extra.filter(s => s && s.urls).forEach(s => iceServers.iceServers.push(s));
+        }
+      } catch (e) { console.warn("Bad iceServersJson in settings", e); }
+    }
 
     function cleanupWebRTC() {
       if (unsubSignal) { unsubSignal(); unsubSignal = null; }
@@ -1009,9 +1029,9 @@
         return;
       }
       const data = snap.data();
-      if (data.game === "kaisa") {
-        // This code belongs to a Kaisa Challenge room — send them to the right game
-        window.location.href = "kaisa.html?joinCode=" + encodeURIComponent(code);
+      if (data.game === "kaisa" || data.game === "damii") {
+        // This code belongs to another game's room — send them to the right game
+        window.location.href = data.game + ".html?joinCode=" + encodeURIComponent(code);
         return;
       }
       if (data.status !== "waiting") {
