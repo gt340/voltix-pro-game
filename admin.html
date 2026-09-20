@@ -214,6 +214,30 @@
   </div>
 
   <div class="card">
+    <h2>♟️ Damii (Ghanaian Draughts)</h2>
+    <p style="font-size:0.8rem; color:#94a3b8; margin-bottom:8px;">
+      Settings for damii.html. Beating the Hard AI without using Undo earns the prize and a leaderboard win.
+    </p>
+    <label>Prize for beating the Hard AI</label>
+    <input type="text" id="damiiAiPrize" value="Free earpods discount / special offer" />
+    <button class="btn btn-primary" id="saveDamiiBtn" style="margin-top:14px;">Save Damii Settings</button>
+    <div class="status" id="damiiSettingsStatus"></div>
+  </div>
+
+  <div class="card">
+    <h2>🌐 Connection (TURN relay)</h2>
+    <p style="font-size:0.8rem; color:#94a3b8; margin-bottom:8px;">
+      Kaisa and Damii already fall back to a built-in relay automatically, so online matches always work.
+      To also make the <b>fast direct link</b> work on strict mobile networks (and to help Foosball, which has no built-in relay),
+      add a TURN server: create a free account at metered.ca → your app → copy the ICE servers JSON and paste it here.
+      Leave empty to use STUN only.
+    </p>
+    <textarea id="iceServersJson" rows="6" placeholder='[{"urls":"turn:standard.relay.metered.ca:80","username":"...","credential":"..."}]' style="width:100%; padding:10px; border-radius:8px; border:1px solid #334155; background:#1e293b; color:#e2e8f0; font-family:monospace; font-size:0.8rem;"></textarea>
+    <button class="btn btn-primary" id="saveTurnBtn" style="margin-top:10px;">Save Connection Settings</button>
+    <div class="status" id="turnSettingsStatus"></div>
+  </div>
+
+  <div class="card">
     <h2>🔊 Sound Effects</h2>
     <p style="font-size:0.8rem; color:#94a3b8; margin-bottom:8px;">
       Upload short audio clips for real match-style sound. Each one is used automatically
@@ -316,7 +340,13 @@
   </div>
 
   <div class="card">
-    <h2>🎱 Recent Kaisa Online Matches</h2>
+    <h2>♟️ Damii Leaderboard (Top 20)</h2>
+    <div id="adminDamiiLeaderboard">Loading…</div>
+    <button class="btn btn-danger" id="resetDamiiLbBtn" style="margin-top:12px;">Reset Damii Leaderboard</button>
+  </div>
+
+  <div class="card">
+    <h2>🎱♟️ Recent Online Matches (Kaisa &amp; Damii)</h2>
     <div id="adminKaisaMatches">Loading…</div>
   </div>
 
@@ -459,6 +489,7 @@
       loadMusic();
       loadLeaderboard();
       loadKaisaLeaderboard();
+      loadDamiiLeaderboard();
       loadKaisaMatches();
       loadUsers();
       loadWinners();
@@ -481,6 +512,8 @@
         document.getElementById("aiPrize").value = s.aiPrize || "";
         document.getElementById("kaisaAiPrize").value = s.kaisaAiPrize || "Free earpods discount / special offer";
         document.getElementById("kaisaWinScore").value = s.kaisaWinScore || 60;
+        document.getElementById("damiiAiPrize").value = s.damiiAiPrize || "Free earpods discount / special offer";
+        document.getElementById("iceServersJson").value = s.iceServersJson || "";
         document.getElementById("prize1").value = (s.prizes && s.prizes[1]) || "GHc 50";
         document.getElementById("prize2").value = (s.prizes && s.prizes[2]) || "GHc 30";
         document.getElementById("prize3").value = (s.prizes && s.prizes[3]) || "GHc 20";
@@ -947,20 +980,79 @@
       alert("Kaisa leaderboard reset");
     };
 
+    document.getElementById("saveDamiiBtn").onclick = async () => {
+      const statusEl = document.getElementById("damiiSettingsStatus");
+      try {
+        await db.collection("gameSettings").doc("main").set({
+          damiiAiPrize: document.getElementById("damiiAiPrize").value.trim(),
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+        statusEl.textContent = "Damii settings saved ✓";
+      } catch (err) { statusEl.textContent = "Couldn't save: " + err.message; }
+      setTimeout(() => statusEl.textContent = "", 2500);
+    };
+
+    document.getElementById("saveTurnBtn").onclick = async () => {
+      const statusEl = document.getElementById("turnSettingsStatus");
+      const raw = document.getElementById("iceServersJson").value.trim();
+      if (raw) {
+        try {
+          const arr = JSON.parse(raw);
+          if (!Array.isArray(arr) || !arr.every(x => x && x.urls)) throw new Error("must be a list of servers, each with a \"urls\" field");
+        } catch (err) {
+          statusEl.textContent = "That isn't valid ICE servers JSON: " + err.message;
+          return;
+        }
+      }
+      try {
+        await db.collection("gameSettings").doc("main").set({ iceServersJson: raw }, { merge: true });
+        statusEl.textContent = raw ? "TURN servers saved ✓" : "Cleared — STUN only ✓";
+      } catch (err) { statusEl.textContent = "Couldn't save: " + err.message; }
+      setTimeout(() => statusEl.textContent = "", 3000);
+    };
+
+    async function loadDamiiLeaderboard() {
+      const el = document.getElementById("adminDamiiLeaderboard");
+      try {
+        const snap = await db.collection("damiiLeaderboard").orderBy("wins", "desc").limit(20).get();
+        if (snap.empty) { el.innerHTML = "<p style='color:#64748b'>Empty</p>"; return; }
+        let html = "<table><tr><th>#</th><th>Name</th><th>Wins</th></tr>";
+        let r = 1;
+        snap.forEach(doc => {
+          const d = doc.data();
+          html += `<tr><td>${r}</td><td>${esc(d.name || "Player")}</td><td>${d.wins || 0}</td></tr>`;
+          r++;
+        });
+        el.innerHTML = html + "</table>";
+      } catch (err) {
+        el.innerHTML = "<p class='error'>Couldn't load: " + esc(err.message) + "</p>";
+      }
+    }
+
+    document.getElementById("resetDamiiLbBtn").onclick = async () => {
+      if (!confirm("Really reset the entire Damii leaderboard?")) return;
+      const snap = await db.collection("damiiLeaderboard").get();
+      const batch = db.batch();
+      snap.forEach(doc => batch.delete(doc.ref));
+      await batch.commit();
+      loadDamiiLeaderboard();
+      alert("Damii leaderboard reset");
+    };
+
     async function loadKaisaMatches() {
       const el = document.getElementById("adminKaisaMatches");
       try {
         // Single-field filter (no orderBy) so no extra Firestore index is needed; sorted here instead.
-        const snap = await db.collection("matches").where("game", "==", "kaisa").limit(100).get();
-        if (snap.empty) { el.innerHTML = "<p style='color:#64748b'>No Kaisa online matches yet</p>"; return; }
+        const snap = await db.collection("matches").where("game", "in", ["kaisa", "damii"]).limit(100).get();
+        if (snap.empty) { el.innerHTML = "<p style='color:#64748b'>No online matches yet</p>"; return; }
         const rows = [];
         snap.forEach(doc => rows.push({ id: doc.id, ...doc.data() }));
         rows.sort((a, b) => ((b.createdAt && b.createdAt.seconds) || 0) - ((a.createdAt && a.createdAt.seconds) || 0));
-        let html = "<table><tr><th>Room</th><th>Host</th><th>Guest</th><th>Score</th><th>Status</th><th>Winner</th></tr>";
+        let html = "<table><tr><th>Game</th><th>Room</th><th>Host</th><th>Guest</th><th>Score</th><th>Status</th><th>Winner</th></tr>";
         rows.slice(0, 20).forEach(m => {
           const winner = m.winner === "host" ? m.hostName : m.winner === "guest" ? m.guestName : "-";
-          html += `<tr><td>${esc(m.id)}</td><td>${esc(m.hostName || "-")}</td><td>${esc(m.guestName || "-")}</td>` +
-                  `<td>${m.hostScore || 0}-${m.guestScore || 0}</td><td>${esc(m.status || "-")}</td><td>${esc(winner || "-")}</td></tr>`;
+          html += `<tr><td>${m.game === "damii" ? "♟️" : "🎱"}</td><td>${esc(m.id)}</td><td>${esc(m.hostName || "-")}</td><td>${esc(m.guestName || "-")}</td>` +
+                  `<td>${m.game === "damii" ? "-" : (m.hostScore || 0) + "-" + (m.guestScore || 0)}</td><td>${esc(m.status || "-")}</td><td>${esc(winner || "-")}</td></tr>`;
         });
         el.innerHTML = html + "</table>";
       } catch (err) {
@@ -972,10 +1064,10 @@
       const snap = await db.collection("users").orderBy("createdAt", "desc").limit(30).get();
       const el = document.getElementById("adminUsers");
       if (snap.empty) { el.innerHTML = "<p style='color:#64748b'>No users yet</p>"; return; }
-      let html = "<table><tr><th>Name</th><th>Balls</th><th>Foosball wins</th><th>Kaisa wins</th></tr>";
+      let html = "<table><tr><th>Name</th><th>Balls</th><th>Foosball wins</th><th>Kaisa wins</th><th>Damii wins</th></tr>";
       snap.forEach(doc => {
         const d = doc.data();
-        html += `<tr><td>${d.name || doc.id.slice(0,6)}</td><td>${d.balls || 0}</td><td>${d.wins || 0}</td><td>${d.kaisaWins || 0}</td></tr>`;
+        html += `<tr><td>${d.name || doc.id.slice(0,6)}</td><td>${d.balls || 0}</td><td>${d.wins || 0}</td><td>${d.kaisaWins || 0}</td><td>${d.damiiWins || 0}</td></tr>`;
       });
       html += "</table>";
       el.innerHTML = html;
@@ -989,7 +1081,7 @@
       snap.forEach(doc => {
         const w = doc.data();
         const score = w.finalScore ? `${w.finalScore.you}-${w.finalScore.opponent}` : "-";
-        html += `<tr><td>${w.name || "-"}</td><td>${w.phone || "-"}</td><td>${w.prize || "-"}</td><td>${score}</td><td>${w.game === "kaisa" ? "🎱 Kaisa" + (w.difficulty ? " (" + w.difficulty + ")" : "") : "⚽ Foosball"}</td><td>${w.mode || "-"}</td></tr>`;
+        html += `<tr><td>${w.name || "-"}</td><td>${w.phone || "-"}</td><td>${w.prize || "-"}</td><td>${score}</td><td>${w.game === "kaisa" ? "🎱 Kaisa" + (w.difficulty ? " (" + w.difficulty + ")" : "") : w.game === "damii" ? "♟️ Damii" : "⚽ Foosball"}</td><td>${w.mode || "-"}</td></tr>`;
       });
       html += "</table>";
       el.innerHTML = html;
