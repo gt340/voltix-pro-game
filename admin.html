@@ -225,6 +225,19 @@
   </div>
 
   <div class="card">
+    <h2>🎲 Ludo</h2>
+    <p style="font-size:0.8rem; color:#94a3b8; margin-bottom:8px;">
+      Settings for ludo.html. Players choose how many Hard AIs to face (1–3); only beating at least the number below earns the prize and a leaderboard win.
+    </p>
+    <label>Prize for beating the Hard AI(s)</label>
+    <input type="text" id="ludoAiPrize" value="Free earpods discount / special offer" />
+    <label>Minimum Hard AIs to beat for a prize</label>
+    <input type="number" id="ludoPrizeMinAi" value="3" min="1" max="3" />
+    <button class="btn btn-primary" id="saveLudoBtn" style="margin-top:14px;">Save Ludo Settings</button>
+    <div class="status" id="ludoSettingsStatus"></div>
+  </div>
+
+  <div class="card">
     <h2>🌐 Connection (TURN relay)</h2>
     <p style="font-size:0.8rem; color:#94a3b8; margin-bottom:8px;">
       Kaisa and Damii already fall back to a built-in relay automatically, so online matches always work.
@@ -282,6 +295,33 @@
     <button class="btn" id="uploadModel3dRedBtn" style="margin-top:4px;">Upload</button>
     <div id="model3dRedPreview" style="margin-top:6px;"></div>
     <div class="status" id="model3dStatus"></div>
+  </div>
+
+  <div class="card">
+    <h2>📢 Site Announcements</h2>
+    <p style="font-size:0.8rem; color:#94a3b8; margin-bottom:8px;">
+      Shown at the very top of every page — Foosball, Kaisa, Damii, Ludo and Chat — the next
+      time each player opens it. Add a message, an image from your gallery, a voice recording,
+      or any mix of the three (at least one is required).
+    </p>
+    <label>Message (optional)</label>
+    <textarea id="anncText" placeholder="e.g. New prizes this weekend! Or: server maintenance tonight 10–11pm"></textarea>
+    <label>Image (optional)</label>
+    <input type="file" id="anncImageFile" accept="image/*" />
+    <div id="anncImagePreview" style="margin-top:6px;"></div>
+    <label style="margin-top:10px; display:block;">Voice message (optional)</label>
+    <div style="display:flex; gap:8px; align-items:center; margin-top:4px;">
+      <button type="button" class="btn" id="anncMicBtn">🎤 Record</button>
+      <span id="anncMicStatus" style="font-size:0.8rem; color:#94a3b8;"></span>
+    </div>
+    <div id="anncAudioPreview" style="margin-top:6px;"></div>
+    <button class="btn btn-gold" id="postAnncBtn" style="margin-top:14px;">📢 Post Announcement</button>
+    <div class="status" id="anncStatus"></div>
+  </div>
+
+  <div class="card">
+    <h2>Active Announcements</h2>
+    <div id="adminAnnouncements">Loading…</div>
   </div>
 
   <div class="card">
@@ -346,7 +386,13 @@
   </div>
 
   <div class="card">
-    <h2>🎱♟️ Recent Online Matches (Kaisa &amp; Damii)</h2>
+    <h2>🎲 Ludo Leaderboard (Top 20)</h2>
+    <div id="adminLudoLeaderboard">Loading…</div>
+    <button class="btn btn-danger" id="resetLudoLbBtn" style="margin-top:12px;">Reset Ludo Leaderboard</button>
+  </div>
+
+  <div class="card">
+    <h2>🎱♟️🎲 Recent Online Matches</h2>
     <div id="adminKaisaMatches">Loading…</div>
   </div>
 
@@ -486,10 +532,12 @@
       dashboard.classList.remove("hidden");
       loadSettings();
       loadBanners();
+      loadAnnouncements();
       loadMusic();
       loadLeaderboard();
       loadKaisaLeaderboard();
       loadDamiiLeaderboard();
+      loadLudoLeaderboard();
       loadKaisaMatches();
       loadUsers();
       loadWinners();
@@ -513,6 +561,8 @@
         document.getElementById("kaisaAiPrize").value = s.kaisaAiPrize || "Free earpods discount / special offer";
         document.getElementById("kaisaWinScore").value = s.kaisaWinScore || 60;
         document.getElementById("damiiAiPrize").value = s.damiiAiPrize || "Free earpods discount / special offer";
+        document.getElementById("ludoAiPrize").value = s.ludoAiPrize || "Free earpods discount / special offer";
+        document.getElementById("ludoPrizeMinAi").value = s.ludoPrizeMinAi || 3;
         document.getElementById("iceServersJson").value = s.iceServersJson || "";
         document.getElementById("prize1").value = (s.prizes && s.prizes[1]) || "GHc 50";
         document.getElementById("prize2").value = (s.prizes && s.prizes[2]) || "GHc 30";
@@ -767,6 +817,153 @@
       await db.collection("gameSettings").doc("main").set(data, { merge: true });
       document.getElementById("settingsStatus").textContent = "Settings saved ✓";
       setTimeout(() => document.getElementById("settingsStatus").textContent = "", 2500);
+    };
+
+    // ---------- Site Announcements ----------
+    let anncImageFileSel = null;
+    let anncAudioBlob = null;
+    let anncMediaRecorder = null, anncChunks = [], anncRecording = false;
+
+    document.getElementById("anncImageFile").onchange = (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      anncImageFileSel = file;
+      const url = URL.createObjectURL(file);
+      const box = document.getElementById("anncImagePreview");
+      box.innerHTML = "";
+      const wrap = document.createElement("div");
+      wrap.style.cssText = "position:relative; display:inline-block;";
+      const img = document.createElement("img");
+      img.src = url;
+      img.style.cssText = "max-width:160px; max-height:120px; border-radius:8px; display:block;";
+      const rm = document.createElement("button");
+      rm.type = "button";
+      rm.textContent = "✕";
+      rm.style.cssText = "position:absolute; top:2px; right:2px; background:#7f1d1d; color:#fff; border:none; border-radius:50%; width:22px; height:22px; cursor:pointer;";
+      rm.onclick = () => {
+        anncImageFileSel = null;
+        document.getElementById("anncImageFile").value = "";
+        box.innerHTML = "";
+      };
+      wrap.append(img, rm);
+      box.appendChild(wrap);
+    };
+
+    document.getElementById("anncMicBtn").onclick = async () => {
+      const btn = document.getElementById("anncMicBtn");
+      const statusEl = document.getElementById("anncMicStatus");
+      if (!anncRecording) {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          anncMediaRecorder = new MediaRecorder(stream);
+          anncChunks = [];
+          anncMediaRecorder.ondataavailable = (e) => anncChunks.push(e.data);
+          anncMediaRecorder.onstop = () => {
+            stream.getTracks().forEach(t => t.stop());
+            anncAudioBlob = new Blob(anncChunks, { type: "audio/webm" });
+            const url = URL.createObjectURL(anncAudioBlob);
+            const box = document.getElementById("anncAudioPreview");
+            box.innerHTML = "";
+            const wrap = document.createElement("div");
+            wrap.style.cssText = "display:flex; gap:8px; align-items:center;";
+            const audio = document.createElement("audio");
+            audio.controls = true;
+            audio.src = url;
+            const rm = document.createElement("button");
+            rm.type = "button";
+            rm.className = "btn";
+            rm.textContent = "Remove";
+            rm.style.cssText = "padding:4px 10px;";
+            rm.onclick = () => { anncAudioBlob = null; box.innerHTML = ""; };
+            wrap.append(audio, rm);
+            box.appendChild(wrap);
+          };
+          anncMediaRecorder.start();
+          anncRecording = true;
+          btn.textContent = "⏹ Stop";
+          statusEl.textContent = "Recording…";
+        } catch (err) {
+          alert("Microphone permission needed to record a voice message.");
+        }
+      } else {
+        anncMediaRecorder.stop();
+        anncRecording = false;
+        btn.textContent = "🎤 Record";
+        statusEl.textContent = "";
+      }
+    };
+
+    document.getElementById("postAnncBtn").onclick = async () => {
+      const text = document.getElementById("anncText").value.trim();
+      const statusEl = document.getElementById("anncStatus");
+      if (!text && !anncImageFileSel && !anncAudioBlob) {
+        statusEl.textContent = "Add a message, image, or voice recording first.";
+        return;
+      }
+      const btn = document.getElementById("postAnncBtn");
+      btn.disabled = true;
+      statusEl.textContent = "Posting…";
+      try {
+        let imageUrl = null, audioUrl = null;
+        if (anncImageFileSel) imageUrl = await uploadToCloudinary(anncImageFileSel, "image");
+        if (anncAudioBlob) audioUrl = await uploadToCloudinary(anncAudioBlob, "video"); // Cloudinary stores audio under "video" resource type
+        await db.collection("announcements").add({
+          text: text || "",
+          imageUrl: imageUrl || null,
+          audioUrl: audioUrl || null,
+          active: true,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        statusEl.textContent = "Announcement posted ✓";
+        document.getElementById("anncText").value = "";
+        anncImageFileSel = null;
+        document.getElementById("anncImageFile").value = "";
+        document.getElementById("anncImagePreview").innerHTML = "";
+        anncAudioBlob = null;
+        document.getElementById("anncAudioPreview").innerHTML = "";
+        loadAnnouncements();
+      } catch (err) {
+        statusEl.textContent = "Couldn't post: " + err.message;
+      }
+      btn.disabled = false;
+      setTimeout(() => { statusEl.textContent = ""; }, 3000);
+    };
+
+    async function loadAnnouncements() {
+      const el = document.getElementById("adminAnnouncements");
+      try {
+        const snap = await db.collection("announcements").orderBy("createdAt", "desc").limit(20).get();
+        if (snap.empty) { el.innerHTML = "<p style='color:#64748b'>No announcements yet</p>"; return; }
+        el.innerHTML = "";
+        snap.forEach(doc => {
+          const a = doc.data();
+          const row = document.createElement("div");
+          row.style.cssText = "border-bottom:1px solid #1e293b; padding:10px 0;";
+          let media = "";
+          if (a.imageUrl) media += `<img src="${esc(a.imageUrl)}" style="max-width:120px; max-height:90px; border-radius:6px; display:block; margin:4px 0;" />`;
+          if (a.audioUrl) media += `<audio controls src="${esc(a.audioUrl)}" style="display:block; margin:4px 0; width:240px;"></audio>`;
+          row.innerHTML = `
+            <div>${a.text ? esc(a.text) : "<i style='color:#64748b'>(no text)</i>"} ${a.active ? "" : "<span style='color:#f87171;font-size:0.75rem;'>(inactive)</span>"}</div>
+            ${media}
+            <div style="display:flex; gap:8px; margin-top:6px;">
+              <button class="btn" onclick="toggleAnnc('${doc.id}', ${!a.active})" style="padding:4px 10px; font-size:0.8rem;">${a.active ? "Deactivate" : "Activate"}</button>
+              <button class="btn btn-danger" onclick="deleteAnnc('${doc.id}')" style="padding:4px 10px; font-size:0.8rem;">Delete</button>
+            </div>`;
+          el.appendChild(row);
+        });
+      } catch (err) {
+        el.innerHTML = "<p class='error'>Couldn't load: " + esc(err.message) + "</p>";
+      }
+    }
+
+    window.toggleAnnc = async (id, active) => {
+      await db.collection("announcements").doc(id).update({ active });
+      loadAnnouncements();
+    };
+    window.deleteAnnc = async (id) => {
+      if (!confirm("Delete this announcement?")) return;
+      await db.collection("announcements").doc(id).delete();
+      loadAnnouncements();
     };
 
     document.getElementById("postBannerBtn").onclick = async () => {
@@ -1039,11 +1236,54 @@
       alert("Damii leaderboard reset");
     };
 
+    document.getElementById("saveLudoBtn").onclick = async () => {
+      const statusEl = document.getElementById("ludoSettingsStatus");
+      const minAi = parseInt(document.getElementById("ludoPrizeMinAi").value, 10);
+      if (!(minAi >= 1 && minAi <= 3)) { statusEl.textContent = "Minimum Hard AIs must be between 1 and 3."; return; }
+      try {
+        await db.collection("gameSettings").doc("main").set({
+          ludoAiPrize: document.getElementById("ludoAiPrize").value.trim(),
+          ludoPrizeMinAi: minAi,
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+        statusEl.textContent = "Ludo settings saved ✓";
+      } catch (err) { statusEl.textContent = "Couldn't save: " + err.message; }
+      setTimeout(() => statusEl.textContent = "", 2500);
+    };
+
+    async function loadLudoLeaderboard() {
+      const el = document.getElementById("adminLudoLeaderboard");
+      try {
+        const snap = await db.collection("ludoLeaderboard").orderBy("wins", "desc").limit(20).get();
+        if (snap.empty) { el.innerHTML = "<p style='color:#64748b'>Empty</p>"; return; }
+        let html = "<table><tr><th>#</th><th>Name</th><th>Wins</th></tr>";
+        let r = 1;
+        snap.forEach(doc => {
+          const d = doc.data();
+          html += `<tr><td>${r}</td><td>${esc(d.name || "Player")}</td><td>${d.wins || 0}</td></tr>`;
+          r++;
+        });
+        el.innerHTML = html + "</table>";
+      } catch (err) {
+        el.innerHTML = "<p class='error'>Couldn't load: " + esc(err.message) + "</p>";
+      }
+    }
+
+    document.getElementById("resetLudoLbBtn").onclick = async () => {
+      if (!confirm("Really reset the entire Ludo leaderboard?")) return;
+      const snap = await db.collection("ludoLeaderboard").get();
+      const batch = db.batch();
+      snap.forEach(doc => batch.delete(doc.ref));
+      await batch.commit();
+      loadLudoLeaderboard();
+      alert("Ludo leaderboard reset");
+    };
+
     async function loadKaisaMatches() {
       const el = document.getElementById("adminKaisaMatches");
       try {
         // Single-field filter (no orderBy) so no extra Firestore index is needed; sorted here instead.
-        const snap = await db.collection("matches").where("game", "in", ["kaisa", "damii"]).limit(100).get();
+        const snap = await db.collection("matches").where("game", "in", ["kaisa", "damii", "ludo"]).limit(100).get();
         if (snap.empty) { el.innerHTML = "<p style='color:#64748b'>No online matches yet</p>"; return; }
         const rows = [];
         snap.forEach(doc => rows.push({ id: doc.id, ...doc.data() }));
@@ -1051,8 +1291,8 @@
         let html = "<table><tr><th>Game</th><th>Room</th><th>Host</th><th>Guest</th><th>Score</th><th>Status</th><th>Winner</th></tr>";
         rows.slice(0, 20).forEach(m => {
           const winner = m.winner === "host" ? m.hostName : m.winner === "guest" ? m.guestName : "-";
-          html += `<tr><td>${m.game === "damii" ? "♟️" : "🎱"}</td><td>${esc(m.id)}</td><td>${esc(m.hostName || "-")}</td><td>${esc(m.guestName || "-")}</td>` +
-                  `<td>${m.game === "damii" ? "-" : (m.hostScore || 0) + "-" + (m.guestScore || 0)}</td><td>${esc(m.status || "-")}</td><td>${esc(winner || "-")}</td></tr>`;
+          html += `<tr><td>${m.game === "damii" ? "♟️" : m.game === "ludo" ? "🎲" : "🎱"}</td><td>${esc(m.id)}</td><td>${esc(m.hostName || "-")}</td><td>${esc(m.guestName || "-")}</td>` +
+                  `<td>${(m.game === "damii" || m.game === "ludo") ? "-" : (m.hostScore || 0) + "-" + (m.guestScore || 0)}</td><td>${esc(m.status || "-")}</td><td>${esc(winner || "-")}</td></tr>`;
         });
         el.innerHTML = html + "</table>";
       } catch (err) {
@@ -1064,10 +1304,10 @@
       const snap = await db.collection("users").orderBy("createdAt", "desc").limit(30).get();
       const el = document.getElementById("adminUsers");
       if (snap.empty) { el.innerHTML = "<p style='color:#64748b'>No users yet</p>"; return; }
-      let html = "<table><tr><th>Name</th><th>Balls</th><th>Foosball wins</th><th>Kaisa wins</th><th>Damii wins</th></tr>";
+      let html = "<table><tr><th>Name</th><th>Balls</th><th>Foosball wins</th><th>Kaisa wins</th><th>Damii wins</th><th>Ludo wins</th></tr>";
       snap.forEach(doc => {
         const d = doc.data();
-        html += `<tr><td>${d.name || doc.id.slice(0,6)}</td><td>${d.balls || 0}</td><td>${d.wins || 0}</td><td>${d.kaisaWins || 0}</td><td>${d.damiiWins || 0}</td></tr>`;
+        html += `<tr><td>${d.name || doc.id.slice(0,6)}</td><td>${d.balls || 0}</td><td>${d.wins || 0}</td><td>${d.kaisaWins || 0}</td><td>${d.damiiWins || 0}</td><td>${d.ludoWins || 0}</td></tr>`;
       });
       html += "</table>";
       el.innerHTML = html;
@@ -1081,7 +1321,7 @@
       snap.forEach(doc => {
         const w = doc.data();
         const score = w.finalScore ? `${w.finalScore.you}-${w.finalScore.opponent}` : "-";
-        html += `<tr><td>${w.name || "-"}</td><td>${w.phone || "-"}</td><td>${w.prize || "-"}</td><td>${score}</td><td>${w.game === "kaisa" ? "🎱 Kaisa" + (w.difficulty ? " (" + w.difficulty + ")" : "") : w.game === "damii" ? "♟️ Damii" : "⚽ Foosball"}</td><td>${w.mode || "-"}</td></tr>`;
+        html += `<tr><td>${w.name || "-"}</td><td>${w.phone || "-"}</td><td>${w.prize || "-"}</td><td>${score}</td><td>${w.game === "kaisa" ? "🎱 Kaisa" + (w.difficulty ? " (" + w.difficulty + ")" : "") : w.game === "damii" ? "♟️ Damii" : w.game === "ludo" ? "🎲 Ludo" + (w.difficulty ? " (" + w.difficulty + ")" : "") : "⚽ Foosball"}</td><td>${w.mode || "-"}</td></tr>`;
       });
       html += "</table>";
       el.innerHTML = html;
