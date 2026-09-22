@@ -396,13 +396,8 @@
   <div id="menu">
     <div class="menu-card">
       <h2>⚡ Play vs Hard AI (free)</h2>
-      <div class="seg" id="aiCountRow">
-        <button type="button" data-n="1">1 Hard AI</button>
-        <button type="button" data-n="2">2 Hard AIs</button>
-        <button type="button" data-n="3" class="active">3 Hard AIs</button>
-      </div>
-      <p class="hint" id="prizeHint">Beat 3 Hard AIs to win a prize</p>
-      <button class="btn-gold wide" id="btnVsAI">Start vs AI</button>
+      <p class="hint" id="prizeHint">Level 1: 1 Hard AI → Level 2: 2 Hard AIs → Level 3: 3 Hard AIs. Win Level 3 to claim the prize.</p>
+      <button class="btn-gold wide" id="btnVsAI">Start — Level 1</button>
     </div>
 
     <div class="menu-card">
@@ -498,6 +493,8 @@
       <h2 id="winTitle">Winner!</h2>
       <p id="winMsg"></p>
       <button class="btn-gold hidden" id="btnClaim" style="margin-top:12px;">🎁 Claim Prize</button>
+      <button class="btn-gold hidden" id="btnContinueLevel" style="margin-top:12px;">▶️ Continue to Level 2</button>
+      <button class="btn-dark hidden" id="btnQuitCampaign" style="margin-top:10px;">Quit (no prize yet)</button>
       <button class="btn-primary" id="playAgainBtn" style="margin-top:12px;">Back to Menu</button>
     </div>
   </div>
@@ -579,7 +576,7 @@
     // ---------- Accounts (same anonymous-auth + users/{uid} setup as the other games) ----------
     let currentUser = null;
     let userData = { balls: 0, wins: 0, name: 'Player' };
-    let settings = { ludoAiPrize: 'Free earpods discount', ludoPrizeMinAi: 3 };
+    let settings = { ludoAiPrize: 'Free earpods discount' };
 
     let authReadyPromise = null;
     function ensureAuth() {
@@ -1442,8 +1439,7 @@ const Sound = (() => {
     let mode = null;                 // 'ai' | 'local' | 'online'
     let isHost = true;
     let myColor = 'red';             // online: host = red, guest = yellow
-    let aiCount = 3;
-    let gameAiCount = 0;
+    let ludoLevel = 1;         // vs-AI campaign: 1 -> 2 -> 3 Hard AIs, must clear in order for the prize
     let roomInfo = { hostName: 'Host', guestName: 'Guest' };
     let awaiting = false;            // guest has sent a request and is waiting for the host's answer
     let rollRequested = false;
@@ -1460,7 +1456,6 @@ const Sound = (() => {
     const infoPanel = document.getElementById('infoPanel');
 
     const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
-    function minAi() { return Math.min(3, Math.max(1, parseInt(settings.ludoPrizeMinAi, 10) || 3)); }
     function oppName() { return isHost ? roomInfo.guestName : roomInfo.hostName; }
     function gamePage(g) {
       return g === 'kaisa' ? 'kaisa.html' : g === 'damii' ? 'damii.html' : g === 'ludo' ? 'ludo.html' : 'index.html';
@@ -1774,20 +1769,41 @@ const Sound = (() => {
     }
 
     /* ---------- Results, prize, leaderboard ---------- */
+    async function deductBalls(n) {
+      if (!currentUser) return;
+      const next = Math.max(0, (userData.balls || 0) - n);
+      try {
+        await db.collection('users').doc(currentUser.uid).update({ balls: next });
+        userData.balls = next;
+        $('ballBalance').textContent = next;
+      } catch (err) { console.warn('deductBalls failed', err); }
+    }
+
     function showWin() {
       if (winShown) return;
       winShown = true;
       const w = game.winner;
       let title, msg = 'All four tokens reached home.';
-      let iWon = false, prize = false;
+      let iWon = false, prize = false, levelUp = false;
       if (mode === 'ai') {
         iWon = w.type === 'human';
-        title = iWon ? '🎉 You win!' : `${cap(w.color)} (Hard AI) wins`;
-        prize = iWon && gameAiCount >= minAi();
-        if (iWon && !prize) msg += `\nBeat ${minAi()} Hard AIs at once to win the prize.`;
+        if (iWon && ludoLevel < 3) {
+          levelUp = true;
+          title = `🎉 Congratulations! Level ${ludoLevel} Complete`;
+          msg = `You beat ${ludoLevel} Hard AI${ludoLevel === 1 ? '' : 's'}.\nKeep playing to win the prize?`;
+        } else if (iWon) {
+          title = '🎉 You beat all 3 levels!';
+          prize = true;
+        } else {
+          title = `${cap(w.color)} (Hard AI) wins`;
+          msg += '\n-2 balls. Try again from Level 1!';
+          deductBalls(2);
+          ludoLevel = 1;
+        }
       } else if (mode === 'online') {
         iWon = w.color === myColor;
         title = iWon ? '🎉 You win!' : `${oppName()} wins`;
+        if (!iWon) { msg += '\n-2 balls.'; deductBalls(2); }
       } else {
         title = `${cap(w.color)} Wins!`;
       }
@@ -1795,6 +1811,11 @@ const Sound = (() => {
       document.getElementById('winTitle').textContent = title;
       document.getElementById('winMsg').textContent = msg;
       document.getElementById('btnClaim').classList.toggle('hidden', !prize);
+      document.getElementById('btnContinueLevel').classList.toggle('hidden', !levelUp);
+      document.getElementById('btnQuitCampaign').classList.toggle('hidden', !levelUp);
+      document.getElementById('playAgainBtn').classList.toggle('hidden', levelUp);
+      if (levelUp) document.getElementById('btnContinueLevel').textContent = `▶️ Continue to Level ${ludoLevel + 1}`;
+      else if (mode === 'ai' && !prize) ludoLevel = 1;   // loss: campaign restarts next time
 
       if (mode === 'online' && isHost) finalizeMatchDoc(w.color);
       if (iWon && (mode === 'online' || prize) && !recorded) {
@@ -1824,7 +1845,7 @@ const Sound = (() => {
           prize: settings.ludoAiPrize || '',
           mode: 'ai',
           game: 'ludo',
-          difficulty: gameAiCount + ' Hard AI' + (gameAiCount === 1 ? '' : 's'),
+          difficulty: '3 Hard AIs (full campaign)',
           finalScore: { you: 4, opponent: Math.max(0, ...others) },
           createdAt: firebase.firestore.FieldValue.serverTimestamp()
         });
@@ -1856,11 +1877,8 @@ const Sound = (() => {
     }
 
     function updatePrizeHint() {
-      const need = minAi();
       const prize = settings.ludoAiPrize || 'a prize';
-      $('prizeHint').textContent = aiCount >= need
-        ? `🎁 Beat ${aiCount} Hard AI${aiCount === 1 ? '' : 's'} to win: ${prize}`
-        : `Practice — beat at least ${need} Hard AIs to win: ${prize}`;
+      $('prizeHint').textContent = `🎁 Clear Level 1 → 2 → 3 (1, then 2, then 3 Hard AIs) in one run to win: ${prize}. Lose a level and 2 balls are deducted — winning costs nothing.`;
     }
 
     function beginGame(types, m) {
@@ -1868,7 +1886,6 @@ const Sound = (() => {
       mode = m;
       animating = false; awaiting = false; rollRequested = false;
       recorded = false; winShown = false;
-      gameAiCount = m === 'ai' ? types.filter(t => t === 'ai-hard').length : 0;
       game = new Game(types);
       show('gameUI');
       $('winOverlay').classList.add('hidden');
@@ -1885,6 +1902,7 @@ const Sound = (() => {
 
     function backToMenu() {
       if (mode === 'online') leaveOnline();
+      ludoLevel = 1;   // abandoning the run (or already finished it) — start over next time
       sessionToken++;
       Sound.stopBG();
       game = null; mode = null; animating = false;
@@ -1900,17 +1918,16 @@ const Sound = (() => {
       2: ['human', 'ai-hard', 'ai-hard', 'off'],
       3: ['human', 'ai-hard', 'ai-hard', 'ai-hard']
     };
-    document.querySelectorAll('#aiCountRow button').forEach(b => {
-      b.onclick = () => {
-        aiCount = parseInt(b.dataset.n, 10);
-        document.querySelectorAll('#aiCountRow button').forEach(x => x.classList.toggle('active', x === b));
-        updatePrizeHint();
-      };
-    });
     $('btnVsAI').onclick = async () => {
       if (!currentUser && !(await waitForAuth())) return;
-      beginGame(AI_SEATS[aiCount], 'ai');
+      ludoLevel = 1;
+      beginGame(AI_SEATS[ludoLevel], 'ai');
     };
+    $('btnContinueLevel').onclick = () => {
+      ludoLevel = Math.min(3, ludoLevel + 1);
+      beginGame(AI_SEATS[ludoLevel], 'ai');
+    };
+    $('btnQuitCampaign').onclick = () => backToMenu();
     $('btnCustom').onclick = () => show('setup');
     $('btnBackSetup').onclick = () => show('menu');
     $('startBtn').onclick = () => {
