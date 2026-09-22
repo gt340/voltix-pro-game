@@ -216,7 +216,10 @@
   <div class="card">
     <h2>♟️ Damii (Ghanaian Draughts)</h2>
     <p style="font-size:0.8rem; color:#94a3b8; margin-bottom:8px;">
-      Settings for damii.html. Beating the Hard AI without using Undo earns the prize and a leaderboard win.
+      Settings for damii.html. Playing vs AI is a 3-level campaign: beat the Hard AI, choose to
+      continue, beat it again, continue again, then beat it a third time in a row (without
+      using Undo in any of the three) to earn the prize and a leaderboard win. Losing at any
+      level deducts 2 balls from the player and ends the run; winning costs nothing.
     </p>
     <label>Prize for beating the Hard AI</label>
     <input type="text" id="damiiAiPrize" value="Free earpods discount / special offer" />
@@ -227,12 +230,13 @@
   <div class="card">
     <h2>🎲 Ludo</h2>
     <p style="font-size:0.8rem; color:#94a3b8; margin-bottom:8px;">
-      Settings for ludo.html. Players choose how many Hard AIs to face (1–3); only beating at least the number below earns the prize and a leaderboard win.
+      Settings for ludo.html. Playing vs AI is a 3-level campaign: Level 1 is 1 Hard AI, Level 2
+      is 2 Hard AIs, Level 3 is 3 Hard AIs — beat a level, choose to continue, and only completing
+      Level 3 earns the prize and a leaderboard win. Losing at any level deducts 2 balls from the
+      player and ends the run; winning costs nothing.
     </p>
-    <label>Prize for beating the Hard AI(s)</label>
+    <label>Prize for completing all 3 levels</label>
     <input type="text" id="ludoAiPrize" value="Free earpods discount / special offer" />
-    <label>Minimum Hard AIs to beat for a prize</label>
-    <input type="number" id="ludoPrizeMinAi" value="3" min="1" max="3" />
     <button class="btn btn-primary" id="saveLudoBtn" style="margin-top:14px;">Save Ludo Settings</button>
     <div class="status" id="ludoSettingsStatus"></div>
   </div>
@@ -562,7 +566,6 @@
         document.getElementById("kaisaWinScore").value = s.kaisaWinScore || 60;
         document.getElementById("damiiAiPrize").value = s.damiiAiPrize || "Free earpods discount / special offer";
         document.getElementById("ludoAiPrize").value = s.ludoAiPrize || "Free earpods discount / special offer";
-        document.getElementById("ludoPrizeMinAi").value = s.ludoPrizeMinAi || 3;
         document.getElementById("iceServersJson").value = s.iceServersJson || "";
         document.getElementById("prize1").value = (s.prizes && s.prizes[1]) || "GHc 50";
         document.getElementById("prize2").value = (s.prizes && s.prizes[2]) || "GHc 30";
@@ -1238,12 +1241,9 @@
 
     document.getElementById("saveLudoBtn").onclick = async () => {
       const statusEl = document.getElementById("ludoSettingsStatus");
-      const minAi = parseInt(document.getElementById("ludoPrizeMinAi").value, 10);
-      if (!(minAi >= 1 && minAi <= 3)) { statusEl.textContent = "Minimum Hard AIs must be between 1 and 3."; return; }
       try {
         await db.collection("gameSettings").doc("main").set({
           ludoAiPrize: document.getElementById("ludoAiPrize").value.trim(),
-          ludoPrizeMinAi: minAi,
           updatedAt: firebase.firestore.FieldValue.serverTimestamp()
         }, { merge: true });
         statusEl.textContent = "Ludo settings saved ✓";
