@@ -166,16 +166,41 @@
     }
     .btn-gold { background: linear-gradient(135deg, #b45309, #fbbf24); color: #0f172a; }
     .empty { text-align: center; color: #64748b; padding: 30px 16px; font-size: 0.9rem; }
+  
+    /* ---------- Site-wide announcements banner ---------- */
+    #anncBar { position: relative; z-index: 80; }
+    .annc-card {
+      background: linear-gradient(135deg, #1e293b, #0f172a);
+      border-left: 4px solid #fbbf24;
+      padding: 10px 14px;
+      margin-bottom: 6px;
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      position: relative;
+      font-size: 0.88rem;
+      color: #e2e8f0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    .annc-card img { max-width: 64px; max-height: 64px; border-radius: 6px; flex-shrink: 0; object-fit: cover; }
+    .annc-card .annc-body { flex: 1; min-width: 0; line-height: 1.35; word-break: break-word; }
+    .annc-card audio { width: 100%; max-width: 260px; margin-top: 6px; height: 32px; display: block; }
+    .annc-card .annc-close {
+      background: none; border: none; color: #94a3b8; font-size: 1.15rem; cursor: pointer;
+      line-height: 1; padding: 2px 4px; flex-shrink: 0;
+    }
   </style>
 </head>
 <body>
+  <div id="anncBar"></div>
   <div class="topbar">
     <img src="voltix-logo.png" alt="Voltix" onerror="this.style.display='none'" />
     <h1 id="chatTitle">Voltix Chat</h1>
     <button class="icon-btn" id="backBtn" style="display:none;">←</button>
     <a href="index.html" class="icon-btn" title="Foosball">⚽</a>
     <a href="kaisa.html" class="icon-btn" title="Kaisa">🎱</a>
-    <a href="damii.html" class="icon-btn" title="Damii">♟️</a>
+<a href="damii.html" class="icon-btn" title="Damii">♟️</a>
+    <a href="ludo.html" class="icon-btn" title="Ludo">🎲</a>
   </div>
 
   <div class="tabs" id="mainTabs">
@@ -229,7 +254,7 @@
     <div class="join-box">
       <h3 style="color:#fbbf24; margin-bottom:8px;">Join Voltix Family</h3>
       <p style="font-size:0.85rem; color:#94a3b8; margin-bottom:12px;">
-        Share these links with family & friends so they can join the community and play Foosball, Kaisa and Damii.
+        Share these links with family & friends so they can join the community and play Foosball, Kaisa, Damii and Ludo.
       </p>
     </div>
     <div class="social-links" id="socialLinks">
@@ -277,6 +302,36 @@
     const auth = firebase.auth();
     const db = firebase.firestore();
 
+    // ---------- Site-wide announcements banner (posted from Admin) ----------
+    (function loadAnnouncementBanner() {
+      const bar = document.getElementById("anncBar");
+      if (!bar) return;
+      function escAnnc(s) {
+        return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+      }
+      db.collection("announcements").where("active", "==", true).limit(20).get()
+        .then(snap => {
+          if (snap.empty) return;
+          const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+            .sort((a, b) => ((b.createdAt && b.createdAt.seconds) || 0) - ((a.createdAt && a.createdAt.seconds) || 0))
+            .slice(0, 5);
+          docs.forEach(a => {
+            const card = document.createElement("div");
+            card.className = "annc-card";
+            let html = "";
+            if (a.imageUrl) html += `<img src="${escAnnc(a.imageUrl)}" alt="" />`;
+            html += `<div class="annc-body">`;
+            if (a.text) html += `<div>${escAnnc(a.text)}</div>`;
+            if (a.audioUrl) html += `<audio controls src="${escAnnc(a.audioUrl)}"></audio>`;
+            html += `</div><button type="button" class="annc-close" aria-label="Dismiss">✕</button>`;
+            card.innerHTML = html;
+            card.querySelector(".annc-close").onclick = () => card.remove();
+            bar.appendChild(card);
+          });
+        })
+        .catch(() => {});
+    })();
+
     // Cloudinary config (unsigned upload preset) — used for chat images/voice notes
     const CLOUDINARY_CLOUD_NAME = "gi28yswe";
     const CLOUDINARY_UPLOAD_PRESET = "Voltix Pro GH";
@@ -297,7 +352,8 @@
     const GAMES = {
       foosball: { label: "Foosball Challenge", icon: "⚡", page: "index.html" },
       kaisa:    { label: "Kaisa Challenge",    icon: "🎱", page: "kaisa.html" },
-      damii:    { label: "Damii Challenge",    icon: "♟️", page: "damii.html" }
+      damii:    { label: "Damii Challenge",    icon: "♟️", page: "damii.html" },
+      ludo:     { label: "Ludo Challenge",     icon: "🎲", page: "ludo.html" }
     };
     function gameInfo(key) { return GAMES[key] || GAMES.foosball; }
 
