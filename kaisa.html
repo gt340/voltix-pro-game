@@ -148,9 +148,33 @@
     .win-card h2 { font-size: 1.5rem; margin-bottom: 8px; }
     .win-card p { opacity: 0.85; margin-bottom: 18px; font-size: 0.95rem; }
     .win-card .btn { width: 100%; margin-top: 8px; padding: 12px; font-size: 0.95rem; }
+  
+    /* ---------- Site-wide announcements banner ---------- */
+    #anncBar { position: relative; z-index: 80; }
+    .annc-card {
+      background: linear-gradient(135deg, #1e293b, #0f172a);
+      border-left: 4px solid #fbbf24;
+      padding: 10px 14px;
+      margin-bottom: 6px;
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      position: relative;
+      font-size: 0.88rem;
+      color: #e2e8f0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    .annc-card img { max-width: 64px; max-height: 64px; border-radius: 6px; flex-shrink: 0; object-fit: cover; }
+    .annc-card .annc-body { flex: 1; min-width: 0; line-height: 1.35; word-break: break-word; }
+    .annc-card audio { width: 100%; max-width: 260px; margin-top: 6px; height: 32px; display: block; }
+    .annc-card .annc-close {
+      background: none; border: none; color: #94a3b8; font-size: 1.15rem; cursor: pointer;
+      line-height: 1; padding: 2px 4px; flex-shrink: 0;
+    }
   </style>
 </head>
 <body>
+  <div id="anncBar"></div>
   <!-- HEADER -->
   <div class="header">
     <img src="voltix-logo.png" alt="Voltix Pro" class="logo" onerror="this.style.display='none'" />
@@ -164,6 +188,7 @@
     <div style="display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end;">
       <a href="index.html" class="btn" style="padding:6px 10px;" title="Foosball">⚽</a>
       <a href="damii.html" class="btn" style="padding:6px 10px;" title="Damii">♟️</a>
+      <a href="ludo.html" class="btn" style="padding:6px 10px;" title="Ludo">🎲</a>
       <a href="chat.html" class="btn" style="padding:6px 10px;" title="Chat">💬</a>
       <a href="index.html?buy=1" class="btn btn-gold" style="padding:6px 10px;">Buy Balls</a>
     </div>
@@ -338,6 +363,36 @@
     firebase.initializeApp(firebaseConfig);
     const auth = firebase.auth();
     const db = firebase.firestore();
+
+    // ---------- Site-wide announcements banner (posted from Admin) ----------
+    (function loadAnnouncementBanner() {
+      const bar = document.getElementById("anncBar");
+      if (!bar) return;
+      function escAnnc(s) {
+        return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+      }
+      db.collection("announcements").where("active", "==", true).limit(20).get()
+        .then(snap => {
+          if (snap.empty) return;
+          const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+            .sort((a, b) => ((b.createdAt && b.createdAt.seconds) || 0) - ((a.createdAt && a.createdAt.seconds) || 0))
+            .slice(0, 5);
+          docs.forEach(a => {
+            const card = document.createElement("div");
+            card.className = "annc-card";
+            let html = "";
+            if (a.imageUrl) html += `<img src="${escAnnc(a.imageUrl)}" alt="" />`;
+            html += `<div class="annc-body">`;
+            if (a.text) html += `<div>${escAnnc(a.text)}</div>`;
+            if (a.audioUrl) html += `<audio controls src="${escAnnc(a.audioUrl)}"></audio>`;
+            html += `</div><button type="button" class="annc-close" aria-label="Dismiss">✕</button>`;
+            card.innerHTML = html;
+            card.querySelector(".annc-close").onclick = () => card.remove();
+            bar.appendChild(card);
+          });
+        })
+        .catch(() => {});
+    })();
 
     const $ = (id) => document.getElementById(id);
     const canvas = $('game');
