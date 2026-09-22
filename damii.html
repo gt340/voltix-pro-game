@@ -272,7 +272,7 @@
       <button class="btn-dark" id="btnOnline">Challenge Friend (Online)</button>
       <button class="btn-dark" id="btnRules">Rules</button>
     </div>
-    <p class="hint" id="prizeHint">Beat the Hard AI to win a prize • Friend joins for 1 ball, host plays free</p>
+    <p class="hint" id="prizeHint">Win vs the Hard AI 3 times in a row (Level 1 → 2 → 3) to claim the prize • Friend joins for 1 ball, host plays free</p>
     <div class="card" style="margin-top:12px;">
       <h3 style="color:var(--gold); margin-bottom:8px; font-size:0.95rem; text-transform:uppercase; letter-spacing:0.5px;">Damii Champions</h3>
       <div id="leaderboardList">Loading…</div>
@@ -361,6 +361,8 @@
       <h2 id="endTitle" style="color:var(--gold);margin-bottom:10px;">Game Over</h2>
       <p id="endMsg" style="white-space:pre-line;"></p>
       <button class="btn-gold hidden" id="btnClaim" style="margin-top:16px;">🎁 Claim Prize</button>
+      <button class="btn-gold hidden" id="btnContinueLevel" style="margin-top:12px;">▶️ Continue to Level 2</button>
+      <button class="btn-dark hidden" id="btnQuitCampaign" style="margin-top:10px;">Quit (no prize yet)</button>
       <button class="btn-dark" id="btnAgain" style="margin-top:10px;">Back to Menu</button>
     </div>
   </div>
@@ -492,8 +494,8 @@
         const snap = await db.collection('gameSettings').doc('main').get();
         if (snap.exists) settings = { ...settings, ...snap.data() };
       } catch (e) { console.warn('settings', e); }
-      $('prizeHint').textContent = 'Beat the Hard AI to win: ' + (settings.damiiAiPrize || 'a prize') +
-        ' • Friend joins for 1 ball, host plays free';
+      $('prizeHint').textContent = 'Win vs the Hard AI 3 times in a row to claim: ' + (settings.damiiAiPrize || 'a prize') +
+        '. Lose and 2 balls are deducted — winning costs nothing. Friend joins for 1 ball, host plays free.';
     }
     async function loadLeaderboard() {
       const list = $('leaderboardList');
@@ -847,8 +849,20 @@
 
     // ===================== UI =====================
     let flip = false;          // the guest sees the board turned round so their pieces are at the bottom
-    let undoUsed = false;      // using Undo vs the AI disqualifies that game from prizes / leaderboard
+    let undoUsed = false;      // using Undo in the CURRENT game — shown in the turn banner
+    let undoUsedCampaign = false; // using Undo in ANY leg of the current campaign disqualifies the whole run
+    let damiiLevel = 1;        // vs-AI campaign: win 3 in a row (Level 1 -> 2 -> 3) for the prize
     let roomInfo = { hostName: 'Host', guestName: 'Guest' };
+
+    async function deductBalls(n) {
+      if (!currentUser) return;
+      const next = Math.max(0, (userData.balls || 0) - n);
+      try {
+        await db.collection('users').doc(currentUser.uid).update({ balls: next });
+        userData.balls = next;
+        $('ballBalance').textContent = next;
+      } catch (err) { console.warn('deductBalls failed', err); }
+    }
 
     function renderBoard() {
       const el = $('board');
@@ -948,17 +962,40 @@
       gameOver = true;
       updateUI();
       const iWon = mode === 'ai' ? winner === 'b' : mode === 'online' ? winner === myColor : false;
-      let title;
-      if (mode === 'ai') title = iWon ? 'You win!' : 'AI wins';
-      else if (mode === 'online') title = iWon ? 'You win!' : 'Opponent wins';
-      else title = winner === 'b' ? 'Blue Wins!' : 'Red Wins!';
-      const prizeEligible = mode === 'ai' && iWon && !undoUsed;
+      let title, levelUp = false, prizeEligible = false;
       let text = msg;
-      if (mode === 'ai' && iWon && undoUsed) text += '\nYou used Undo, so this win has no prize or leaderboard credit.';
+      if (mode === 'ai') {
+        if (iWon && damiiLevel < 3) {
+          levelUp = true;
+          title = `🎉 Congratulations! Level ${damiiLevel} Complete`;
+          text = `You beat the Hard AI (win ${damiiLevel} of 3 in a row).\nKeep playing to win the prize?`;
+        } else if (iWon) {
+          title = '🎉 You beat all 3 levels!';
+          prizeEligible = !undoUsedCampaign;
+          if (undoUsedCampaign) text += '\nUndo was used somewhere in this run, so it has no prize or leaderboard credit.';
+        } else {
+          title = 'AI wins';
+          text += '\n-2 balls. Try again from Level 1!';
+          deductBalls(2);
+          damiiLevel = 1;
+          undoUsedCampaign = false;
+        }
+      } else if (mode === 'online') {
+        title = iWon ? 'You win!' : 'Opponent wins';
+        if (!iWon) { text += '\n-2 balls.'; deductBalls(2); }
+      } else {
+        title = winner === 'b' ? 'Blue Wins!' : 'Red Wins!';
+      }
       show('end');
       $('endTitle').textContent = title;
       $('endMsg').textContent = text;
       $('btnClaim').classList.toggle('hidden', !prizeEligible);
+      $('btnContinueLevel').classList.toggle('hidden', !levelUp);
+      $('btnQuitCampaign').classList.toggle('hidden', !levelUp);
+      $('btnAgain').classList.toggle('hidden', levelUp);
+      if (levelUp) $('btnContinueLevel').textContent = `▶️ Continue to Level ${damiiLevel + 1}`;
+      else if (mode === 'ai' && !prizeEligible) { damiiLevel = 1; undoUsedCampaign = false; }
+
       if (mode === 'online' && isHost) finalizeMatchDoc(winner);
       if (iWon && (mode === 'online' || prizeEligible)) recordWin();
     }
@@ -1013,10 +1050,11 @@
       }
     }
 
-    function startGame(m) {
+    function startGame(m, keepLevel) {
       mode = m;
       initBoard();
       undoUsed = false;
+      if (!keepLevel) { damiiLevel = 1; undoUsedCampaign = false; }
       flip = false;
       myColor = 'b';
       setNames();
@@ -1036,6 +1074,17 @@
       if (!currentUser && !(await waitForAuth())) return;
       startGame('ai');
     };
+    $('btnContinueLevel').onclick = () => {
+      damiiLevel = Math.min(3, damiiLevel + 1);
+      startGame('ai', true);
+    };
+    $('btnQuitCampaign').onclick = () => {
+      damiiLevel = 1; undoUsedCampaign = false;
+      mode = null;
+      show('menu');
+      if (currentUser) loadUser();
+      loadLeaderboard();
+    };
     $('btnLocal').onclick = () => startGame('local');
     $('btnOnline').onclick = () => { $('lobbyMsg').textContent = ''; show('lobby'); };
     $('btnRules').onclick = () => show('rules');
@@ -1043,6 +1092,7 @@
     $('btnBackLobby').onclick = () => show('menu');
     $('btnAgain').onclick = () => {
       if (mode === 'online') leaveOnline();
+      damiiLevel = 1; undoUsedCampaign = false;
       mode = null; // back on the menu
       show('menu');
       if (currentUser) loadUser();
@@ -1060,7 +1110,7 @@
     };
     $('btnUndo').onclick = () => {
       if (history.length < 1 || mode === 'online') return;
-      if (mode === 'ai') undoUsed = true;
+      if (mode === 'ai') { undoUsed = true; undoUsedCampaign = true; }
       const snap = history.pop();
       if (mode === 'ai' && history.length) {
         const snap2 = history.pop();   // undo AI + player
