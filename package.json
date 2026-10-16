@@ -5,5 +5,8 @@
   "description": "Voltix Pro foosball challenge game with Firebase + Paystack payments",
   "dependencies": {
     "firebase-admin": "^12.1.0"
+  },
+  "scripts": {
+    "test": "node --test tests/firestore-rules.test.js"
   }
 }
